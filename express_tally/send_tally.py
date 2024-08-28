@@ -12,7 +12,8 @@ def customer():
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
-            'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -40,7 +41,8 @@ def supplier():
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
-            'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -82,14 +84,15 @@ def purchase():
     purchase_invoices = frappe.db.get_all(
         'Purchase Invoice',
         fields=[
-            'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total',
+            'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total', 'bill_no', 'bill_date',
             'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'supplier', 'supplier_name'
             ],
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
             'docstatus': 1,
-            'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -122,7 +125,8 @@ def sales():
             'posting_date' : ['>=', payload['date']],
             'company': payload['company'],
             'docstatus': 1,
-            # 'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -156,7 +160,8 @@ def payments():
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
             'docstatus': 1,
-            # 'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -166,6 +171,40 @@ def payments():
 
             if payment_no:
                 pi_no = frappe.get_doc('Payment Entry', payment_no)
+
+                if pi_no:
+                    payment['treferences'] = pi_no
+                else:
+                    payment['treferences'] = {}
+
+    return payments
+
+@frappe.whitelist()
+def journal():
+
+    payload = json.loads(frappe.request.data)
+    payments = frappe.db.get_all(
+        'Journal Entry',
+        fields=[
+            'name', 'posting_date', 'docstatus', 'company',
+            'voucher_type', 'branch', 'mspl_voucher_type', 'cheque_no', 'cheque_date', 'user_remark', 'amended_from'
+            ],
+        filters={ 
+            # 'modified' : ['>', payload['date']],
+            'company': payload['company'],
+            'docstatus': 1,
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch'],
+            'is_opening': 'No'
+            },
+        limit=100
+        )
+    if payments:
+        for payment in payments:
+            payment_no = payment['name']
+
+            if payment_no:
+                pi_no = frappe.get_doc('Journal Entry', payment_no)
 
                 if pi_no:
                     payment['treferences'] = pi_no
@@ -193,20 +232,23 @@ def customer_update():
             }
         )
 
-    frappe.db.commit()
+    # frappe.db.commit()
 
 
 @frappe.whitelist()
 def update_tally_flag(doc, method):
-
+        
     if doc:
-        frappe.db.set_value(
-            doc.doctype,
-            doc.name,
-            {
-                "is_synced": 'No',
-                "sync_message": ""
-            }
-        )
+        if method == 'on_cancel' and doc.is_synced == 'No':
+            pass
+        else:
+            frappe.db.set_value(
+                doc.doctype,
+                doc.name,
+                {
+                    "is_synced": 'No',
+                    "sync_message": ""
+                }
+            )
 
-        frappe.db.commit()
+            doc.reload()
