@@ -84,12 +84,16 @@ def purchase():
     purchase_invoices = frappe.db.get_all(
         'Purchase Invoice',
         fields=[
+            'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total',
+            'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'supplier', 'supplier_name', 'bill_no',
+            'amended_from', 'supplier_name_in_tally'
             'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total', 'bill_no', 'bill_date',
             'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'supplier', 'supplier_name'
             ],
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
+            'is_synced': ['!=', 'Yes']
             'docstatus': 1,
             'is_synced': ['!=', 'Yes'],
             'branch': payload['branch']
@@ -119,11 +123,15 @@ def sales():
         'Sales Invoice',
         fields=[
             'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total',
-            'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'customer', 'customer_name'
+            'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'customer', 'customer_name',
+            'supplier_name_in_tally', 'amended_from'
             ],
         filters={ 
-            'posting_date' : ['>=', payload['date']],
+            # 'posting_date' : ['>=', payload['date']],
+            'posting_date' : ['>=', '2023-01-01'],
             'company': payload['company'],
+            'docstatus': ["in", ["1", "2"]],
+            'is_synced': ['!=', 'Yes'],
             'docstatus': 1,
             'is_synced': ['!=', 'Yes'],
             'branch': payload['branch']
@@ -136,6 +144,11 @@ def sales():
 
             if sales_invoice_no:
                 pi_no = frappe.get_doc('Sales Invoice', sales_invoice_no)
+                cust = frappe.get_doc("Customer", pi_no.customer)
+                credit_limit = 0
+                if len(cust.credit_limits) > 0:
+                    credit_limit = cust.credit_limits[0].credit_limit
+                sales_invoice['credit_limit'] = credit_limit
 
                 if pi_no:
                     sales_invoice['tsalesinvoice'] = pi_no
@@ -154,11 +167,14 @@ def payments():
         'Payment Entry',
         fields=[
             'name', 'posting_date', 'docstatus', 'company', 'party', 'party_name',
-            'paid_to', 'paid_amount', 'remarks', 'payment_type', 'paid_from'
+            'paid_to', 'paid_amount', 'remarks', 'payment_type', 'paid_from', 'amended_from', 'naming_series'
             ],
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
+            'docstatus': ["in", ["1", "2"]],
+            'is_synced': ['!=', 'Yes']
+            # 'is_synced': ['!=', 'Yes']
             'docstatus': 1,
             'is_synced': ['!=', 'Yes'],
             'branch': payload['branch']
@@ -173,11 +189,42 @@ def payments():
                 pi_no = frappe.get_doc('Payment Entry', payment_no)
 
                 if pi_no:
+
                     payment['treferences'] = pi_no
+                    
                 else:
                     payment['treferences'] = {}
 
     return payments
+
+@frappe.whitelist()
+def stock_journals():
+
+    payload = json.loads(frappe.request.data)
+    stock_jvs = frappe.db.get_all(
+        'Stock Entry',
+        fields=[
+            'name', 'posting_date', 'docstatus', 'company',
+            'amended_from', 'naming_series', 'remarks', 'total_amount', 'to_warehouse', 'from_warehouse'
+            ],
+        filters={ 
+            # 'modified' : ['>', payload['date']],
+            'company': payload['company'],
+            'docstatus': ["in", ["1", "2"]],
+            'is_synced': ['!=', 'Yes'],
+            # 'is_synced': ['!=', 'Yes']
+            },
+        limit=100
+        )
+    if stock_jvs:
+        for sjv in stock_jvs:
+            pi_no = frappe.get_doc('Stock Entry', sjv.get("name"))
+            if pi_no:
+                sjv['tstockjournal'] = pi_no
+            else:
+                sjv['tstockjournal'] = {}
+
+    return stock_jvs
 
 @frappe.whitelist()
 def journal():
@@ -187,6 +234,12 @@ def journal():
         'Journal Entry',
         fields=[
             'name', 'posting_date', 'docstatus', 'company',
+            'voucher_type', 'cheque_no', 'cheque_date', 'user_remark', 'amended_from'
+            ],
+        filters={ 
+            'company': payload['company'],
+            'docstatus': ["in", ["1", "2"]],
+            'is_synced': ['!=', 'Yes'],
             'voucher_type', 'branch', 'mspl_voucher_type', 'cheque_no', 'cheque_date', 'user_remark', 'amended_from'
             ],
         filters={ 
@@ -213,7 +266,7 @@ def journal():
 
     return payments
 
-
+    return payments
 
 @frappe.whitelist()
 def customer_update():
@@ -239,6 +292,18 @@ def customer_update():
 def update_tally_flag(doc, method):
         
     if doc:
+        frappe.db.set_value(
+            doc.doctype,
+            doc.name,
+            {
+                "is_synced": 'No',
+                "sync_message": ""
+            }
+        )
+
+        doc.reload()
+
+        # frappe.db.commit()
         if method == 'on_cancel' and doc.is_synced == 'No':
             pass
         else:
