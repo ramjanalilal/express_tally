@@ -12,7 +12,8 @@ def customer():
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
-            'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -40,7 +41,8 @@ def supplier():
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
-            'is_synced': ['!=', 'Yes']
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -85,11 +87,16 @@ def purchase():
             'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total',
             'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'supplier', 'supplier_name', 'bill_no',
             'amended_from', 'supplier_name_in_tally'
+            'name', 'posting_date', 'docstatus', 'company', 'base_grand_total', 'base_net_total', 'bill_no', 'bill_date',
+            'base_rounded_total', 'rounding_adjustment', 'modified', 'is_return', 'supplier', 'supplier_name'
             ],
         filters={ 
             # 'modified' : ['>', payload['date']],
             'company': payload['company'],
             'is_synced': ['!=', 'Yes']
+            'docstatus': 1,
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -125,6 +132,9 @@ def sales():
             'company': payload['company'],
             'docstatus': ["in", ["1", "2"]],
             'is_synced': ['!=', 'Yes'],
+            'docstatus': 1,
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -165,6 +175,9 @@ def payments():
             'docstatus': ["in", ["1", "2"]],
             'is_synced': ['!=', 'Yes']
             # 'is_synced': ['!=', 'Yes']
+            'docstatus': 1,
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch']
             },
         limit=100
         )
@@ -227,6 +240,14 @@ def journal():
             'company': payload['company'],
             'docstatus': ["in", ["1", "2"]],
             'is_synced': ['!=', 'Yes'],
+            'voucher_type', 'branch', 'mspl_voucher_type', 'cheque_no', 'cheque_date', 'user_remark', 'amended_from'
+            ],
+        filters={ 
+            # 'modified' : ['>', payload['date']],
+            'company': payload['company'],
+            'docstatus': 1,
+            'is_synced': ['!=', 'Yes'],
+            'branch': payload['branch'],
             'is_opening': 'No'
             },
         limit=100
@@ -242,6 +263,8 @@ def journal():
                     payment['treferences'] = pi_no
                 else:
                     payment['treferences'] = {}
+
+    return payments
 
     return payments
 
@@ -262,12 +285,12 @@ def customer_update():
             }
         )
 
-    frappe.db.commit()
+    # frappe.db.commit()
 
 
 @frappe.whitelist()
 def update_tally_flag(doc, method):
-
+        
     if doc:
         frappe.db.set_value(
             doc.doctype,
@@ -281,3 +304,16 @@ def update_tally_flag(doc, method):
         doc.reload()
 
         # frappe.db.commit()
+        if method == 'on_cancel' and doc.is_synced == 'No':
+            pass
+        else:
+            frappe.db.set_value(
+                doc.doctype,
+                doc.name,
+                {
+                    "is_synced": 'No',
+                    "sync_message": ""
+                }
+            )
+
+            doc.reload()

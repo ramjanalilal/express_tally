@@ -114,6 +114,10 @@ doc_events = {
 		"on_update": "express_tally.send_tally.update_tally_flag",
 		"on_cancel": "express_tally.send_tally.update_tally_flag"
 	}    
+	"Journal Entry": {
+		"on_update": "express_tally.send_tally.update_tally_flag",
+		"on_cancel": "express_tally.send_tally.update_tally_flag"
+	}
 }
 
 # Scheduled Tasks
@@ -193,7 +197,6 @@ user_data_fields = [
 # ]
 
 fixtures = ['Custom Field']
-
 jenv = {
 	"methods": [
 		"etpl_get_warehouse_batch:express_tally.misc.etpl_get_warehouse_batch"
